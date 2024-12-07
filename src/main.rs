@@ -22,10 +22,9 @@ use {defmt_rtt as _, panic_probe as _};
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
-
     let delay: Duration = Duration::from_millis(1000);
 
-    //Display
+    //Display pins
     let mut back_light = Output::new(p.PIN_12, Level::Low);
 
     let display_cs = p.PIN_5;
@@ -35,29 +34,6 @@ async fn main(spawner: Spawner) {
     let vsync = p.PIN_8;
     let dc = p.PIN_9;
     let rst = p.PIN_4;
-
-    let mut display_config = spi::Config::default();
-    display_config.frequency = 8_000_000;
-    display_config.phase = spi::Phase::CaptureOnSecondTransition;
-    display_config.polarity = spi::Polarity::IdleHigh;
-    // let spi = Spi::new_blocking(p.SPI0, display_cs, mosi, miso, display_config);
-    let spi = Spi::new_blocking_txonly(p.SPI0, miso, mosi, spi::Config::default());
-
-    let dcx = Output::new(dc, Level::Low);
-    let rst = Output::new(rst, Level::Low);
-    back_light.set_high();
-
-    let di = SPIInterface::new(spi, dcx, Output::new(display_cs, Level::High));
-    let mut display = ST7789::new(di, rst, 240, 240);
-    display.init(&mut Delay).unwrap();
-    display.set_orientation(Orientation::Portrait).unwrap();
-
-    let raw_image_data = ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
-    let ferris = Image::new(&raw_image_data, Point::new(34, 8));
-
-    // draw image on black background
-    display.clear(Rgb565::BLACK).unwrap();
-    ferris.draw(&mut display).unwrap();
 
     //LED(s). I think i't s a RGB LED and it's the one above the d-pad
     let mut led_g = Output::new(p.PIN_13, Level::Low);
@@ -76,6 +52,31 @@ async fn main(spawner: Spawner) {
     let left_button = Input::new(p.PIN_26, Pull::Up);
     let up_button = Input::new(p.PIN_27, Pull::Up);
 
+    //SPI Display setup
+    let mut display_config = spi::Config::default();
+    display_config.frequency = 8_000_000;
+    display_config.phase = spi::Phase::CaptureOnSecondTransition;
+    display_config.polarity = spi::Polarity::IdleHigh;
+    let spi = Spi::new_blocking_txonly(p.SPI0, miso, mosi, spi::Config::default());
+
+    let dcx = Output::new(dc, Level::Low);
+    let rst = Output::new(rst, Level::Low);
+    back_light.set_high();
+
+    let di = SPIInterface::new(spi, dcx, Output::new(display_cs, Level::High));
+    let mut display = ST7789::new(di, rst, 240, 240);
+
+    //Display demo
+    display.init(&mut Delay).unwrap();
+    display.set_orientation(Orientation::Portrait).unwrap();
+
+    let raw_image_data = ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
+    let ferris = Image::new(&raw_image_data, Point::new(34, 8));
+
+    // draw image on black background
+    display.clear(Rgb565::BLACK).unwrap();
+    ferris.draw(&mut display).unwrap();
+
     loop {
         back_light.set_high();
         led_g.set_high();
@@ -86,8 +87,6 @@ async fn main(spawner: Spawner) {
         led_r.set_low();
         led_b.set_high();
         Timer::after(delay).await;
-        // back_light.set_low();
-
         Timer::after_secs(5).await;
     }
 }
