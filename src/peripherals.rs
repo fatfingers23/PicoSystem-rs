@@ -68,15 +68,27 @@ pub struct Peripherals {
     pub LED_G: Output<'static>,
     pub LED_R: Output<'static>,
     pub LED_B: Output<'static>,
-    pub Y_BUTTON: Input<'static>,
-    pub X_BUTTON: Input<'static>,
-    pub A_BUTTON: Input<'static>,
-    pub B_BUTTON: Input<'static>,
-    pub DOWN_BUTTON: Input<'static>,
-    pub RIGHT_BUTTON: Input<'static>,
-    pub LEFT_BUTTON: Input<'static>,
-    pub UP_BUTTON: Input<'static>,
+    // pub Y_BUTTON: Input<'static>,
+    pub Y_BUTTON: Button<Input<'static>>,
+    pub X_BUTTON: Button<Input<'static>>,
+    pub A_BUTTON: Button<Input<'static>>,
+    pub B_BUTTON: Button<Input<'static>>,
+    pub DOWN_BUTTON: Button<Input<'static>>,
+    pub RIGHT_BUTTON: Button<Input<'static>>,
+    pub LEFT_BUTTON: Button<Input<'static>>,
+    pub UP_BUTTON: Button<Input<'static>>,
     pub AUDIO: Output<'static>,
+}
+
+//TODO move this to a new game engine crate?
+pub struct Button<AnyPin> {
+    pin: AnyPin,
+}
+
+impl Button<Input<'_>> {
+    pub fn is_pressed(&self) -> bool {
+        self.pin.is_low()
+    }
 }
 
 pub fn init(config: Config) -> Peripherals {
@@ -144,14 +156,30 @@ pub fn init(config: Config) -> Peripherals {
         LED_G: Output::new(p.PIN_13, Level::Low),
         LED_R: Output::new(p.PIN_14, Level::Low),
         LED_B: Output::new(p.PIN_15, Level::Low),
-        Y_BUTTON: Input::new(p.PIN_16, Pull::Up),
-        X_BUTTON: Input::new(p.PIN_17, Pull::Up),
-        A_BUTTON: Input::new(p.PIN_18, Pull::Up),
-        B_BUTTON: Input::new(p.PIN_19, Pull::Up),
-        DOWN_BUTTON: Input::new(p.PIN_20, Pull::Up),
-        RIGHT_BUTTON: Input::new(p.PIN_21, Pull::Up),
-        LEFT_BUTTON: Input::new(p.PIN_22, Pull::Up),
-        UP_BUTTON: Input::new(p.PIN_23, Pull::Up),
+        Y_BUTTON: Button {
+            pin: Input::new(p.PIN_16, Pull::Up),
+        },
+        X_BUTTON: Button {
+            pin: Input::new(p.PIN_17, Pull::Up),
+        },
+        A_BUTTON: Button {
+            pin: Input::new(p.PIN_18, Pull::Up),
+        },
+        B_BUTTON: Button {
+            pin: Input::new(p.PIN_19, Pull::Up),
+        },
+        DOWN_BUTTON: Button {
+            pin: Input::new(p.PIN_20, Pull::Up),
+        },
+        RIGHT_BUTTON: Button {
+            pin: Input::new(p.PIN_21, Pull::Up),
+        },
+        LEFT_BUTTON: Button {
+            pin: Input::new(p.PIN_22, Pull::Up),
+        },
+        UP_BUTTON: Button {
+            pin: Input::new(p.PIN_23, Pull::Up),
+        },
         AUDIO: Output::new(p.PIN_11, Level::Low),
     }
 }

@@ -56,21 +56,23 @@ async fn main(_spawner: Spawner) {
     display.set_orientation(Orientation::Portrait).unwrap();
 
     let raw_image_data = ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
-    let ferris = Image::new(&raw_image_data, Point::new(34, 8));
+    let ferris = Image::new(&raw_image_data, Point::new(5, 8));
 
     // draw image on black background
     display.clear(Rgb565::BLACK).unwrap();
     ferris.draw(&mut display).unwrap();
 
+    let ferris_two = Image::new(&raw_image_data, Point::new(100, 8));
+    ferris_two.draw(&mut display).unwrap();
+    let y_button = p.Y_BUTTON;
+    led_b.set_high();
     loop {
-        led_g.set_high();
-        Timer::after(delay).await;
-        led_g.set_low();
-        led_r.set_high();
-        Timer::after(delay).await;
-        led_r.set_low();
-        led_b.set_high();
-        Timer::after(delay).await;
-        Timer::after_secs(5).await;
+        if y_button.is_pressed() {
+            info!("Y button pressed");
+            // display.clear(Rgb565::BLACK).unwrap();
+            display.set_orientation(Orientation::Landscape).unwrap();
+            ferris.draw(&mut display).unwrap();
+            ferris_two.draw(&mut display).unwrap();
+        }
     }
 }
