@@ -5,7 +5,7 @@ use defmt::*;
 use display_interface_spi::SPIInterface;
 use embassy_executor::Spawner;
 use embassy_rp::{
-    gpio::{Input, Level, Output, Pull},
+    gpio::{Level, Output},
     spi::{self, Spi},
 };
 use embassy_time::{Delay, Duration, Timer};
@@ -15,38 +15,27 @@ use embedded_graphics::prelude::*;
 use st7789::{Orientation, ST7789};
 use {defmt_rtt as _, panic_probe as _};
 
+mod peripherals;
+
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
-    let p = embassy_rp::init(Default::default());
+async fn main(_spawner: Spawner) {
+    let p = peripherals::init(Default::default());
     let delay: Duration = Duration::from_millis(1000);
 
-    //Display pins
+    let mut led_g = p.LED_G;
+    let mut led_r = p.LED_R;
+    let mut led_b = p.LED_B;
+
+    // Display pins
     let mut back_light = Output::new(p.PIN_12, Level::Low);
 
     let display_cs = p.PIN_5;
     let miso = p.PIN_6;
     let mosi = p.PIN_7;
 
-    let vsync = p.PIN_8;
+    let _vsync = p.PIN_8;
     let dc = p.PIN_9;
     let rst = p.PIN_4;
-
-    //LED(s). I think i't s a RGB LED and it's the one above the d-pad
-    let mut led_g = Output::new(p.PIN_13, Level::Low);
-    let mut led_r = Output::new(p.PIN_14, Level::Low);
-    let mut led_b = Output::new(p.PIN_15, Level::Low);
-
-    //buttons
-    let y_button = Input::new(p.PIN_16, Pull::Up);
-    let x_button = Input::new(p.PIN_17, Pull::Up);
-    let a_button = Input::new(p.PIN_18, Pull::Up);
-    let b_button = Input::new(p.PIN_19, Pull::Up);
-
-    //Directional pad
-    let down_button = Input::new(p.PIN_20, Pull::Up);
-    let right_button = Input::new(p.PIN_21, Pull::Up);
-    let left_button = Input::new(p.PIN_26, Pull::Up);
-    let up_button = Input::new(p.PIN_27, Pull::Up);
 
     //SPI Display setup
     let mut display_config = spi::Config::default();
@@ -74,7 +63,6 @@ async fn main(spawner: Spawner) {
     ferris.draw(&mut display).unwrap();
 
     loop {
-        back_light.set_high();
         led_g.set_high();
         Timer::after(delay).await;
         led_g.set_low();
