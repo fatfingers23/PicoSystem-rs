@@ -24,7 +24,7 @@ use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::Text;
 use mipidsi::{
     models::ST7789,
-    options::{Orientation, RefreshOrder, TearingEffect},
+    options::{Orientation, TearingEffect},
     Builder,
 };
 
@@ -61,11 +61,14 @@ async fn main(_spawner: Spawner) {
 
     //SPI Display setup
     let mut display_config = spi::Config::default();
-    display_config.frequency = 8_000_000;
+    display_config.frequency = 64_000_000;
     display_config.phase = spi::Phase::CaptureOnSecondTransition;
     display_config.polarity = spi::Polarity::IdleHigh;
 
-    let spi = Spi::new_blocking_txonly(p.SPI0, &mut miso, &mut mosi, spi::Config::default());
+    let mut spi_config = spi::Config::default();
+    spi_config.frequency = 64_000_000;
+
+    let spi = Spi::new_blocking_txonly(p.SPI0, &mut miso, &mut mosi, spi_config);
     let spi_bus: Mutex<NoopRawMutex, _> = Mutex::new(RefCell::new(spi));
 
     let dcx = Output::new(dc, Level::Low);
@@ -97,6 +100,10 @@ async fn main(_spawner: Spawner) {
     let bmp_data = include_bytes!("../assets/issac.bmp");
     let bmp_issac: Bmp<Rgb565> = Bmp::from_slice(bmp_data).unwrap();
 
+    let background_bmp: Bmp<Rgb565> =
+        Bmp::from_slice(include_bytes!("../assets/background.bmp")).unwrap();
+    let background = Image::new(&background_bmp, Point::new(0, 0));
+
     let mut issac_sprite = Sprite::new(Point::new(5, 120), bmp_issac);
 
     let mut y_button = p.Y_BUTTON;
@@ -121,11 +128,38 @@ async fn main(_spawner: Spawner) {
         .build();
     let mut buf = heapless::String::<255>::new();
     let mut issacs_new_pos = Point::new(5, 120);
+    let mut sprite_movement = true;
     loop {
         wait_vsync(&mut vsync).await;
 
-        buf.clear();
+        if right_button.is_pressed() {
+            issacs_new_pos.x += 2;
+            sprite_movement = true;
+        }
 
+        if left_button.is_pressed() {
+            issacs_new_pos.x -= 2;
+            sprite_movement = true;
+        }
+
+        if down_button.is_pressed() {
+            issacs_new_pos.y += 2;
+            sprite_movement = true;
+        }
+
+        if up_button.is_pressed() {
+            issacs_new_pos.y -= 2;
+            sprite_movement = true;
+        }
+
+        //background
+        if sprite_movement {
+            background.draw(&mut display).unwrap();
+        }
+        sprite_movement = false;
+
+        //Fps counter
+        buf.clear();
         let fps = frames as f32 / start.elapsed().as_millis() as f32 * 1000.0;
 
         core::write!(&mut buf, "fps: {:.1}", fps).unwrap();
@@ -133,22 +167,6 @@ async fn main(_spawner: Spawner) {
             .draw(&mut display)
             .unwrap();
         frames += 1;
-
-        if right_button.is_pressed() {
-            issacs_new_pos.x += 2;
-        }
-
-        if left_button.is_pressed() {
-            issacs_new_pos.x -= 2;
-        }
-
-        if down_button.is_pressed() {
-            issacs_new_pos.y += 2;
-        }
-
-        if up_button.is_pressed() {
-            issacs_new_pos.y -= 2;
-        }
 
         issac_sprite.move_sprite(issacs_new_pos, &mut display);
     }
