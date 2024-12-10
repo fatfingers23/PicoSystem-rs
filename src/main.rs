@@ -22,17 +22,14 @@ use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::Text;
 use mipidsi::{
     models::ST7789,
-    options::{Orientation, Rotation},
+    options::{Orientation, RefreshOrder, Rotation, TearingEffect},
     Builder,
 };
 use pio_proc::pio_file;
 // use st7789::{Orientation, ST7789};
 use {defmt_rtt as _, panic_probe as _};
 
-mod batch;
-mod graphics;
 mod peripherals;
-mod pico_display;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -81,17 +78,18 @@ async fn main(_spawner: Spawner) {
 
     let mut display = Builder::new(ST7789, di)
         .display_size(240, 240)
+        .refresh_order(RefreshOrder::new(
+            mipidsi::options::VerticalRefreshOrder::BottomToTop,
+            mipidsi::options::HorizontalRefreshOrder::RightToLeft,
+        ))
         .invert_colors(mipidsi::options::ColorInversion::Inverted)
         .reset_pin(rst)
         .orientation(Orientation::new())
         .init(&mut Delay)
         .unwrap();
     //Display demo
+    display.set_tearing_effect(TearingEffect::Vertical).unwrap();
     display.clear(Rgb565::BLACK).unwrap();
-
-    // display.clear(Rgb565::BLACK).unwrap();
-
-    // display.set_orientation(Orientation::Portrait).unwrap();
 
     let raw_image_data: ImageRawLE<Rgb565> =
         ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
@@ -124,19 +122,7 @@ async fn main(_spawner: Spawner) {
     let mut text_y = 240 / 2;
 
     loop {
-        match vsync.get_level() {
-            Level::Low => {
-                // Wait for the VSYNC pin to go high (start of VSYNC)
-                // while vsync.get_level() == Level::Low {}
-                info!("VSYNC pin low");
-            }
-            Level::High => {
-                // Wait for the VSYNC pin to go low (end of VSYNC)
-                // while vsync.get_level() == Level::High {}
-                info!("VSYNC pin high");
-            }
-        }
-        // wait_vsync(&mut vsync).await;
+        wait_vsync(&mut vsync).await;
         display.clear(Rgb565::BLACK).unwrap();
         if right_button.is_pressed() {
             // Clear the previous position of Ferris
@@ -187,14 +173,8 @@ async fn main(_spawner: Spawner) {
 
 async fn wait_vsync(vsync_pin: &mut Input<'_>) {
     // Wait for the VSYNC pin to go low (end of VSYNC)
-    vsync_pin.wait_for_any_edge().await;
+    // vsync_pin.wait_for_any_edge().await;
 
-    // while vsync_pin.is_high() {
-    //     Timer::after(Duration::from_micros(1)).await;
-    // }
-
-    // // Wait for the VSYNC pin to go high (start of VSYNC)
-    // while vsync_pin.is_low() {
-    //     Timer::after(Duration::from_micros(1)).await;
-    // }
+    vsync_pin.wait_for_high().await;
+    vsync_pin.wait_for_low().await;
 }
