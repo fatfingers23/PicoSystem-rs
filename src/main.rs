@@ -2,17 +2,23 @@
 #![no_main]
 
 use core::cell::RefCell;
+use core::fmt::Write;
 
 use defmt::*;
+use display_interface::{DataFormat, DisplayError, WriteOnlyDataCommand};
 use display_interface_spi::SPIInterface;
 use embassy_embedded_hal::shared_bus::blocking::spi::SpiDeviceWithConfig;
 use embassy_executor::Spawner;
 use embassy_rp::{
+    bind_interrupts,
     gpio::{Input, Level, Output, Pull},
+    peripherals::PIO0,
+    pio::{FifoJoin, Pio, PioPin, ShiftConfig, ShiftDirection, StateMachine},
     spi::{self, Spi},
+    Peripheral,
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Duration, Timer};
+use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::image::{Image, ImageRawLE};
 use embedded_graphics::mono_font::ascii::FONT_10X20;
 use embedded_graphics::mono_font::MonoTextStyle;
@@ -20,14 +26,23 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::Text;
+use embedded_graphics::{
+    // image::{Image, ImageRawLE},
+    mono_font::MonoTextStyleBuilder,
+};
 use mipidsi::{
     models::ST7789,
     options::{Orientation, RefreshOrder, Rotation, TearingEffect},
     Builder,
 };
 use pio_proc::pio_file;
+use tinybmp::Bmp;
 // use st7789::{Orientation, ST7789};
 use {defmt_rtt as _, panic_probe as _};
+
+bind_interrupts!(struct Irqs {
+    PIO0_IRQ_0 => embassy_rp::pio::InterruptHandler<PIO0>;
+});
 
 mod peripherals;
 
@@ -74,6 +89,8 @@ async fn main(_spawner: Spawner) {
     );
 
     let di = SPIInterface::new(display_spi, dcx);
+    // let di = Spi9Bit::new(p.PIO0, miso, mosi, display_cs);
+
     // let mut display = ST7789::new(di, rst, 240, 240);
 
     let mut display = Builder::new(ST7789, di)
@@ -93,11 +110,14 @@ async fn main(_spawner: Spawner) {
 
     let raw_image_data: ImageRawLE<Rgb565> =
         ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
-    let ferris = Image::new(&raw_image_data, Point::new(5, 8));
+    let bmp_data = include_bytes!("../assets/issac.bmp");
+    let bmp_issac: Bmp<Rgb565> = Bmp::from_slice(bmp_data).unwrap();
+
+    // let ferris = Image::new(&raw_image_data, Point::new(5, 8));
 
     // draw image on black background
 
-    ferris.draw(&mut display).unwrap();
+    // ferris.draw(&mut display).unwrap();
 
     // let ferris_two = Image::new(&raw_image_data, Point::new(100, 8));
     // ferris_two.draw(&mut display).unwrap();
@@ -121,44 +141,50 @@ async fn main(_spawner: Spawner) {
     let mut text_x = 240;
     let mut text_y = 240 / 2;
 
+    let mut frames = 0;
+
+    let start = Instant::now();
+
+    let char_style = MonoTextStyleBuilder::new()
+        .font(&FONT_10X20)
+        .text_color(Rgb565::CSS_YELLOW)
+        .background_color(Rgb565::BLACK)
+        .build();
+    let mut buf = heapless::String::<255>::new();
+    let mut ferris_location = Point::new(5, 50);
     loop {
         wait_vsync(&mut vsync).await;
-        display.clear(Rgb565::BLACK).unwrap();
+
+        buf.clear();
+
+        let fps = frames as f32 / start.elapsed().as_millis() as f32 * 1000.0;
+
+        core::write!(&mut buf, "fps: {:.1}", fps).unwrap();
+        Text::new(&buf, Point::new(0, 15), char_style)
+            .draw(&mut display)
+            .unwrap();
+        frames += 1;
+
         if right_button.is_pressed() {
-            // Clear the previous position of Ferris
-
-            // display.clear(Rgb565::BLACK).unwrap();
-
-            let ferris = Image::new(&raw_image_data, ferris_location);
-
-            ferris.draw(&mut display).unwrap();
-            // move_sprite(&mut display, "Hello, World!", ferris_location.x, ferris_location.y);
-            info!("Right button pressed");
+            ferris_location.x += 2;
         }
 
         if left_button.is_pressed() {
-            ferris_location = Point::new(ferris_location.x - 5, ferris_location.y);
+            ferris_location.x -= 2;
             // display.clear(Rgb565::BLACK).unwrap();
-            // ferris.draw(&mut display).unwrap();
-            info!("Left button pressed");
-        }
-
-        if up_button.is_pressed() {
-            text_y += char_h;
-            info!("Up button pressed");
+            // ferris_location =
         }
 
         if down_button.is_pressed() {
-            text_y -= char_h;
-            info!("Down button pressed");
+            ferris_location.y += 2;
         }
 
-        // Draw text
-        let right = Text::new(text, Point::new(text_x, text_y), text_style)
-            .draw(&mut display)
-            .unwrap();
-        text_x = if right.x <= 0 { 240 } else { text_x - char_w };
-        // Timer::after_millis(100).await;
+        if up_button.is_pressed() {
+            ferris_location.y -= 2;
+        }
+
+        let ferris = Image::new(&bmp_issac, ferris_location);
+        ferris.draw(&mut display).unwrap();
     }
 }
 
@@ -177,4 +203,121 @@ async fn wait_vsync(vsync_pin: &mut Input<'_>) {
 
     vsync_pin.wait_for_high().await;
     vsync_pin.wait_for_low().await;
+}
+
+pub struct Spi9Bit<'l> {
+    sm: StateMachine<'l, PIO0, 0>,
+}
+
+impl<'l> Spi9Bit<'l> {
+    pub fn new(
+        pio: impl Peripheral<P = PIO0> + 'l,
+        clk: impl PioPin,
+        mosi: impl PioPin,
+        cs: impl PioPin,
+    ) -> Spi9Bit<'l> {
+        let Pio {
+            mut common,
+            mut sm0,
+            ..
+        } = Pio::new(pio, Irqs);
+
+        let prg = pio_proc::pio_asm!(
+            r#"
+            .side_set 2
+            .wrap_target
+
+            bitloop:
+                out pins, 1        side 0x0
+                jmp !osre bitloop  side 0x1     ; Fall-through if TXF empties
+                nop                side 0x0 [1] ; CSn back porch
+
+            public entry_point:                 ; Must set X,Y to n-2 before starting!
+                pull ifempty       side 0x2 [1] ; Block with CSn high (minimum 2 cycles)
+
+            .wrap                               ; Note ifempty to avoid time-of-check race
+
+            "#,
+        );
+        let program = prg.program;
+
+        let clk = common.make_pio_pin(clk);
+        let mosi = common.make_pio_pin(mosi);
+        let cs = common.make_pio_pin(cs);
+
+        sm0.set_pin_dirs(embassy_rp::pio::Direction::Out, &[&clk, &mosi, &cs]);
+
+        // let relocated = RelocatedProgram::new(&prg.program);
+        let mut cfg = embassy_rp::pio::Config::default();
+        let relocated = common.load_program(&program);
+        // cs:  side set 0b10
+        // clk: side set 0b01
+        // fist side_set, lower bit in side_set
+        cfg.use_program(&relocated, &[&clk, &cs]);
+
+        cfg.clock_divider = 1u8.into(); // run at full speed
+        cfg.set_out_pins(&[&mosi]);
+        //  cfg.set_set_pins(&[&mosi]);
+        cfg.shift_out = ShiftConfig {
+            auto_fill: false,
+            direction: ShiftDirection::Left,
+            threshold: 9, // 9-bit mode
+        };
+        cfg.fifo_join = FifoJoin::TxOnly;
+        sm0.set_config(&cfg);
+
+        sm0.set_enable(true);
+
+        Self { sm: sm0 }
+    }
+
+    #[inline]
+    pub fn write_data(&mut self, val: u8) {
+        // no need to busy wait
+        while self.sm.tx().full() {}
+        self.sm.tx().push(0x80000000 | ((val as u32) << 23));
+    }
+
+    #[inline]
+    pub fn write_command(&mut self, val: u8) {
+        while self.sm.tx().full() {}
+        self.sm.tx().push((val as u32) << 23);
+    }
+}
+
+impl<'l> WriteOnlyDataCommand for Spi9Bit<'l> {
+    fn send_commands(&mut self, cmd: DataFormat<'_>) -> Result<(), DisplayError> {
+        match cmd {
+            DataFormat::U8(cmds) => {
+                for &c in cmds {
+                    self.write_command(c);
+                }
+            }
+            _ => {
+                defmt::todo!();
+            }
+        }
+        Ok(())
+    }
+
+    fn send_data(&mut self, buf: DataFormat<'_>) -> Result<(), DisplayError> {
+        match buf {
+            DataFormat::U8(buf) => {
+                for &byte in buf {
+                    self.write_data(byte);
+                }
+            }
+            DataFormat::U16BEIter(it) => {
+                for raw in it {
+                    self.write_data((raw >> 8) as u8);
+                    self.write_data((raw & 0xff) as u8);
+                }
+            }
+            _ => {
+                defmt::todo!();
+            }
+        }
+
+        Ok(())
+    }
 }
