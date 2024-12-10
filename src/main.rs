@@ -3,9 +3,7 @@
 
 use core::cell::RefCell;
 use core::fmt::Write;
-
 use defmt::*;
-use display_interface::{DataFormat, DisplayError, WriteOnlyDataCommand};
 use display_interface_spi::SPIInterface;
 use embassy_embedded_hal::shared_bus::blocking::spi::SpiDeviceWithConfig;
 use embassy_executor::Spawner;
@@ -13,31 +11,24 @@ use embassy_rp::{
     bind_interrupts,
     gpio::{Input, Level, Output, Pull},
     peripherals::PIO0,
-    pio::{FifoJoin, Pio, PioPin, ShiftConfig, ShiftDirection, StateMachine},
     spi::{self, Spi},
-    Peripheral,
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Duration, Instant, Timer};
+use embassy_time::{Delay, Duration, Instant};
 use embedded_graphics::image::{Image, ImageRawLE};
 use embedded_graphics::mono_font::ascii::FONT_10X20;
-use embedded_graphics::mono_font::MonoTextStyle;
+use embedded_graphics::mono_font::MonoTextStyleBuilder;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::Text;
-use embedded_graphics::{
-    // image::{Image, ImageRawLE},
-    mono_font::MonoTextStyleBuilder,
-};
 use mipidsi::{
     models::ST7789,
-    options::{Orientation, RefreshOrder, Rotation, TearingEffect},
+    options::{Orientation, RefreshOrder, TearingEffect},
     Builder,
 };
-use pio_proc::pio_file;
+
 use tinybmp::Bmp;
-// use st7789::{Orientation, ST7789};
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -74,8 +65,6 @@ async fn main(_spawner: Spawner) {
     display_config.phase = spi::Phase::CaptureOnSecondTransition;
     display_config.polarity = spi::Polarity::IdleHigh;
 
-    let other_config = spi::Config::default();
-
     let spi = Spi::new_blocking_txonly(p.SPI0, &mut miso, &mut mosi, spi::Config::default());
     let spi_bus: Mutex<NoopRawMutex, _> = Mutex::new(RefCell::new(spi));
 
@@ -89,16 +78,13 @@ async fn main(_spawner: Spawner) {
     );
 
     let di = SPIInterface::new(display_spi, dcx);
-    // let di = Spi9Bit::new(p.PIO0, miso, mosi, display_cs);
-
-    // let mut display = ST7789::new(di, rst, 240, 240);
 
     let mut display = Builder::new(ST7789, di)
         .display_size(240, 240)
-        .refresh_order(RefreshOrder::new(
-            mipidsi::options::VerticalRefreshOrder::BottomToTop,
-            mipidsi::options::HorizontalRefreshOrder::RightToLeft,
-        ))
+        // .refresh_order(RefreshOrder::new(
+        //     mipidsi::options::VerticalRefreshOrder::BottomToTop,
+        //     mipidsi::options::HorizontalRefreshOrder::RightToLeft,
+        // ))
         .invert_colors(mipidsi::options::ColorInversion::Inverted)
         .reset_pin(rst)
         .orientation(Orientation::new())
@@ -108,19 +94,11 @@ async fn main(_spawner: Spawner) {
     display.set_tearing_effect(TearingEffect::Vertical).unwrap();
     display.clear(Rgb565::BLACK).unwrap();
 
-    let raw_image_data: ImageRawLE<Rgb565> =
-        ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
     let bmp_data = include_bytes!("../assets/issac.bmp");
     let bmp_issac: Bmp<Rgb565> = Bmp::from_slice(bmp_data).unwrap();
 
-    // let ferris = Image::new(&raw_image_data, Point::new(5, 8));
+    let mut issac_sprite = Sprite::new(Point::new(5, 120), bmp_issac);
 
-    // draw image on black background
-
-    // ferris.draw(&mut display).unwrap();
-
-    // let ferris_two = Image::new(&raw_image_data, Point::new(100, 8));
-    // ferris_two.draw(&mut display).unwrap();
     let mut y_button = p.Y_BUTTON;
     let x_button = p.X_BUTTON;
     let a_button = p.A_BUTTON;
@@ -131,15 +109,6 @@ async fn main(_spawner: Spawner) {
     let up_button = p.UP_BUTTON;
 
     led_b.set_high();
-    let mut ferris_location = Point::new(5, 8);
-    let mut scroll = 1u16; // absolute scroll offset
-
-    let char_w = 10;
-    let char_h = 20;
-    let text_style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
-    let text = "Hello World ^_^;";
-    let mut text_x = 240;
-    let mut text_y = 240 / 2;
 
     let mut frames = 0;
 
@@ -151,7 +120,7 @@ async fn main(_spawner: Spawner) {
         .background_color(Rgb565::BLACK)
         .build();
     let mut buf = heapless::String::<255>::new();
-    let mut ferris_location = Point::new(5, 50);
+    let mut issacs_new_pos = Point::new(5, 120);
     loop {
         wait_vsync(&mut vsync).await;
 
@@ -166,158 +135,73 @@ async fn main(_spawner: Spawner) {
         frames += 1;
 
         if right_button.is_pressed() {
-            ferris_location.x += 2;
+            issacs_new_pos.x += 2;
         }
 
         if left_button.is_pressed() {
-            ferris_location.x -= 2;
-            // display.clear(Rgb565::BLACK).unwrap();
-            // ferris_location =
+            issacs_new_pos.x -= 2;
         }
 
         if down_button.is_pressed() {
-            ferris_location.y += 2;
+            issacs_new_pos.y += 2;
         }
 
         if up_button.is_pressed() {
-            ferris_location.y -= 2;
+            issacs_new_pos.y -= 2;
         }
 
-        let ferris = Image::new(&bmp_issac, ferris_location);
-        ferris.draw(&mut display).unwrap();
+        issac_sprite.move_sprite(issacs_new_pos, &mut display);
     }
 }
 
-// fn move_sprite(display: &mut impl DrawTarget<Color = Rgb565>, text: &str, x: i32, y: i32) {
-//     display.
-//     let style = TextStyle::new(Font6x8, Rgb565::WHITE);
-//     Text::new(text, Point::new(x, y))
-//         .into_styled(style)
-//         .draw(display)
-//         .unwrap();
-// }
-
 async fn wait_vsync(vsync_pin: &mut Input<'_>) {
-    // Wait for the VSYNC pin to go low (end of VSYNC)
-    // vsync_pin.wait_for_any_edge().await;
-
     vsync_pin.wait_for_high().await;
     vsync_pin.wait_for_low().await;
 }
 
-pub struct Spi9Bit<'l> {
-    sm: StateMachine<'l, PIO0, 0>,
+struct Sprite<'a> {
+    point: Point,
+    size: Option<Size>,
+    bmp_sprite: Bmp<'a, Rgb565>,
+    //TODO pass in background color?
 }
 
-impl<'l> Spi9Bit<'l> {
-    pub fn new(
-        pio: impl Peripheral<P = PIO0> + 'l,
-        clk: impl PioPin,
-        mosi: impl PioPin,
-        cs: impl PioPin,
-    ) -> Spi9Bit<'l> {
-        let Pio {
-            mut common,
-            mut sm0,
-            ..
-        } = Pio::new(pio, Irqs);
-
-        let prg = pio_proc::pio_asm!(
-            r#"
-            .side_set 2
-            .wrap_target
-
-            bitloop:
-                out pins, 1        side 0x0
-                jmp !osre bitloop  side 0x1     ; Fall-through if TXF empties
-                nop                side 0x0 [1] ; CSn back porch
-
-            public entry_point:                 ; Must set X,Y to n-2 before starting!
-                pull ifempty       side 0x2 [1] ; Block with CSn high (minimum 2 cycles)
-
-            .wrap                               ; Note ifempty to avoid time-of-check race
-
-            "#,
-        );
-        let program = prg.program;
-
-        let clk = common.make_pio_pin(clk);
-        let mosi = common.make_pio_pin(mosi);
-        let cs = common.make_pio_pin(cs);
-
-        sm0.set_pin_dirs(embassy_rp::pio::Direction::Out, &[&clk, &mosi, &cs]);
-
-        // let relocated = RelocatedProgram::new(&prg.program);
-        let mut cfg = embassy_rp::pio::Config::default();
-        let relocated = common.load_program(&program);
-        // cs:  side set 0b10
-        // clk: side set 0b01
-        // fist side_set, lower bit in side_set
-        cfg.use_program(&relocated, &[&clk, &cs]);
-
-        cfg.clock_divider = 1u8.into(); // run at full speed
-        cfg.set_out_pins(&[&mosi]);
-        //  cfg.set_set_pins(&[&mosi]);
-        cfg.shift_out = ShiftConfig {
-            auto_fill: false,
-            direction: ShiftDirection::Left,
-            threshold: 9, // 9-bit mode
-        };
-        cfg.fifo_join = FifoJoin::TxOnly;
-        sm0.set_config(&cfg);
-
-        sm0.set_enable(true);
-
-        Self { sm: sm0 }
-    }
-
-    #[inline]
-    pub fn write_data(&mut self, val: u8) {
-        // no need to busy wait
-        while self.sm.tx().full() {}
-        self.sm.tx().push(0x80000000 | ((val as u32) << 23));
-    }
-
-    #[inline]
-    pub fn write_command(&mut self, val: u8) {
-        while self.sm.tx().full() {}
-        self.sm.tx().push((val as u32) << 23);
-    }
-}
-
-impl<'l> WriteOnlyDataCommand for Spi9Bit<'l> {
-    fn send_commands(&mut self, cmd: DataFormat<'_>) -> Result<(), DisplayError> {
-        match cmd {
-            DataFormat::U8(cmds) => {
-                for &c in cmds {
-                    self.write_command(c);
-                }
-            }
-            _ => {
-                defmt::todo!();
-            }
+impl<'a> Sprite<'a> {
+    fn new(point: Point, bmp_sprite: Bmp<'a, Rgb565>) -> Self {
+        Self {
+            point,
+            size: None,
+            bmp_sprite,
         }
-        Ok(())
+    }
+    fn draw(&mut self, display: &mut impl DrawTarget<Color = Rgb565>) {
+        let sprite_image = Image::new(&self.bmp_sprite, self.point);
+        if self.size.is_none() {
+            self.size = Some(sprite_image.bounding_box().size.clone());
+        }
+        // self.size = sprite_image.bounding_box().size.clone();
+        let _ = sprite_image.draw(display);
     }
 
-    fn send_data(&mut self, buf: DataFormat<'_>) -> Result<(), DisplayError> {
-        match buf {
-            DataFormat::U8(buf) => {
-                for &byte in buf {
-                    self.write_data(byte);
-                }
-            }
-            DataFormat::U16BEIter(it) => {
-                for raw in it {
-                    self.write_data((raw >> 8) as u8);
-                    self.write_data((raw & 0xff) as u8);
-                }
-            }
-            _ => {
-                defmt::todo!();
-            }
+    fn move_sprite(&mut self, new_location: Point, display: &mut impl DrawTarget<Color = Rgb565>) {
+        if self.size.is_none() {
+            self.draw(display);
+            return;
         }
 
-        Ok(())
+        if new_location == self.point {
+            return;
+        }
+
+        if let Some(size) = self.size {
+            let erase_old_sprite = Rectangle::new(self.point, size).into_styled(
+                PrimitiveStyleBuilder::new()
+                    .fill_color(Rgb565::BLACK)
+                    .build(),
+            );
+            let _ = erase_old_sprite.draw(display);
+            self.point = new_location;
+            self.draw(display);
+        }
     }
 }
