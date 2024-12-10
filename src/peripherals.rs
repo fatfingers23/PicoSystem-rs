@@ -1,9 +1,12 @@
 #![allow(non_snake_case)]
+use cortex_m::delay::Delay;
+use defmt::{info, Format};
 pub use embassy_rp::peripherals::*;
 use embassy_rp::{
     config::Config,
-    gpio::{Input, Level, Output, Pull},
+    gpio::{AnyPin, Input, Level, Output, Pull},
 };
+use embassy_time::{with_deadline, Duration, Instant, Timer};
 
 #[allow(dead_code)]
 pub struct Peripherals {
@@ -69,25 +72,46 @@ pub struct Peripherals {
     pub LED_R: Output<'static>,
     pub LED_B: Output<'static>,
     // pub Y_BUTTON: Input<'static>,
-    pub Y_BUTTON: Button<Input<'static>>,
-    pub X_BUTTON: Button<Input<'static>>,
-    pub A_BUTTON: Button<Input<'static>>,
-    pub B_BUTTON: Button<Input<'static>>,
-    pub DOWN_BUTTON: Button<Input<'static>>,
-    pub RIGHT_BUTTON: Button<Input<'static>>,
-    pub LEFT_BUTTON: Button<Input<'static>>,
-    pub UP_BUTTON: Button<Input<'static>>,
+    pub Y_BUTTON: Button<'static>,
+    pub X_BUTTON: Button<'static>,
+    pub A_BUTTON: Button<'static>,
+    pub B_BUTTON: Button<'static>,
+    pub DOWN_BUTTON: Button<'static>,
+    pub RIGHT_BUTTON: Button<'static>,
+    pub LEFT_BUTTON: Button<'static>,
+    pub UP_BUTTON: Button<'static>,
     pub AUDIO: Output<'static>,
 }
 
 //TODO move this to a new game engine crate?
-pub struct Button<AnyPin> {
-    pin: AnyPin,
+pub struct Button<'a> {
+    input: Input<'a>,
 }
 
-impl Button<Input<'_>> {
+impl<'a> Button<'a> {
+    pub fn new(pin: AnyPin) -> Self {
+        let input = Input::new(pin, Pull::Up);
+        Self { input }
+    }
+
     pub fn is_pressed(&self) -> bool {
-        self.pin.is_low()
+        self.input.is_low()
+    }
+
+    pub async fn debounce(&mut self) -> Level {
+        loop {
+            let l1 = self.input.get_level();
+
+            self.input.wait_for_any_edge().await;
+
+            // Timer::after(self.debounce).await;
+            Timer::after_millis(20).await;
+
+            let l2 = self.input.get_level();
+            if l1 != l2 {
+                break l2;
+            }
+        }
     }
 }
 
@@ -156,30 +180,14 @@ pub fn init(config: Config) -> Peripherals {
         LED_G: Output::new(p.PIN_13, Level::Low),
         LED_R: Output::new(p.PIN_14, Level::Low),
         LED_B: Output::new(p.PIN_15, Level::Low),
-        Y_BUTTON: Button {
-            pin: Input::new(p.PIN_16, Pull::Up),
-        },
-        X_BUTTON: Button {
-            pin: Input::new(p.PIN_17, Pull::Up),
-        },
-        A_BUTTON: Button {
-            pin: Input::new(p.PIN_18, Pull::Up),
-        },
-        B_BUTTON: Button {
-            pin: Input::new(p.PIN_19, Pull::Up),
-        },
-        DOWN_BUTTON: Button {
-            pin: Input::new(p.PIN_20, Pull::Up),
-        },
-        RIGHT_BUTTON: Button {
-            pin: Input::new(p.PIN_21, Pull::Up),
-        },
-        LEFT_BUTTON: Button {
-            pin: Input::new(p.PIN_22, Pull::Up),
-        },
-        UP_BUTTON: Button {
-            pin: Input::new(p.PIN_23, Pull::Up),
-        },
+        Y_BUTTON: Button::new(AnyPin::from(p.PIN_16)),
+        X_BUTTON: Button::new(AnyPin::from(p.PIN_17)),
+        A_BUTTON: Button::new(AnyPin::from(p.PIN_18)),
+        B_BUTTON: Button::new(AnyPin::from(p.PIN_19)),
+        DOWN_BUTTON: Button::new(AnyPin::from(p.PIN_20)),
+        RIGHT_BUTTON: Button::new(AnyPin::from(p.PIN_21)),
+        LEFT_BUTTON: Button::new(AnyPin::from(p.PIN_22)),
+        UP_BUTTON: Button::new(AnyPin::from(p.PIN_23)),
         AUDIO: Output::new(p.PIN_11, Level::Low),
     }
 }
