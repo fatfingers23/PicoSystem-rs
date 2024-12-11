@@ -1,6 +1,7 @@
 // use crate::ST7789::batch::DrawBatch;
 use crate::display::{Error, Orientation, ST7789};
 
+use defmt::info;
 use display_interface::AsyncWriteOnlyDataCommand;
 use embedded_graphics_core::pixelcolor::Rgb565;
 use embedded_graphics_core::prelude::{DrawTarget, IntoStorage, Point, Size};
@@ -14,7 +15,7 @@ use embedded_hal_1::digital::OutputPin;
 pub const WIDTH: usize = 240;
 pub const HEIGHT: usize = 240;
 
-static mut FRAMEBUFFER: [u16; WIDTH * HEIGHT] = [0; WIDTH * HEIGHT];
+pub static mut FRAMEBUFFER: [u16; WIDTH * HEIGHT] = [0; WIDTH * HEIGHT];
 
 pub fn framebuffer() -> &'static mut [u16; WIDTH * HEIGHT] {
     unsafe { &mut FRAMEBUFFER }
@@ -91,6 +92,7 @@ where
             for _ in 0..clipped_area.size.width {
                 let color = colors.next().unwrap();
                 let color = RawU16::from(color).into_inner();
+
                 fb[index as usize] = color.to_be();
                 index += 1;
             }
@@ -103,26 +105,17 @@ where
         Ok(())
     }
 
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        let color = RawU16::from(color).into_inner().to_be();
-        unsafe {
-            dma::set_mem(
-                &mut self.dma_channel,
-                &color as *const u16 as u32,
-                framebuffer().as_ptr() as u32,
-                2,
-                (WIDTH * HEIGHT) as u32,
-            );
-        }
-        if framebuffer()[0] != color {
-            log::info!(
-                "incorrect framebuffer[0], expected {} got {}",
-                color,
-                framebuffer()[0]
-            );
-        }
-        Ok(())
-    }
+    // fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+    //     let color = RawU16::from(color).into_inner().to_be();
+    //     for _ in 0..2 {
+    //         let colors = core::iter::repeat(RawU16::from(color).into_inner()).take(WIDTH * HEIGHT);
+    //         let _ = self
+    //             .set_pixels(0, 0, (WIDTH - 1) as u16, (HEIGHT - 1) as u16, colors)
+    //             .await;
+    //     }
+
+    //     Ok(())
+    // }
 }
 
 impl<DI, RST, PinE> OriginDimensions for ST7789<DI, RST>

@@ -34,6 +34,7 @@ use static_cell::StaticCell;
 // };
 use display::{
     batch::{to_blocks, to_rows, PixelBlock},
+    graphics::framebuffer,
     Orientation, ST7789,
 };
 use tinybmp::Bmp;
@@ -44,6 +45,9 @@ bind_interrupts!(struct Irqs {
 });
 mod display;
 mod peripherals;
+
+pub const WIDTH: usize = 240;
+pub const HEIGHT: usize = 240;
 
 type Spi0Bus = Mutex<NoopRawMutex, Spi<'static, SPI0, spi::Async>>;
 
@@ -57,8 +61,6 @@ async fn main(_spawner: Spawner) {
 
     // Display pins
     let mut back_light = p.SCREEN_BACKLIGHT;
-    back_light.set_brightness(75);
-    back_light.toggle();
 
     let display_cs = p.PIN_5;
     let mut miso = p.PIN_6;
@@ -70,24 +72,22 @@ async fn main(_spawner: Spawner) {
     let rst = p.PIN_4;
 
     //SPI Display setup
-    let mut display_config = spi::Config::default();
-    display_config.frequency = 80_000_000;
-    // display_config.frequency = 8_000_000;
-    display_config.phase = spi::Phase::CaptureOnSecondTransition;
-    display_config.polarity = spi::Polarity::IdleHigh;
 
-    let spi = Spi::new_txonly(
-        p.SPI0,
-        &mut miso,
-        &mut mosi,
-        p.DMA_CH0,
-        spi::Config::default(),
-    );
+    let mut spi_config = spi::Config::default();
+    spi_config.frequency = 125_000_000u32;
+    let spi = Spi::new_txonly(p.SPI0, &mut miso, &mut mosi, p.DMA_CH0, spi_config);
 
     let spi_bus: Mutex<NoopRawMutex, _> = Mutex::new(spi);
 
     let dcx = Output::new(dc, Level::Low);
     let rst = Output::new(rst, Level::Low);
+
+    let mut display_config = spi::Config::default();
+    // display_config.frequency = 80_000_000;
+    display_config.frequency = 62_500_000u32;
+
+    display_config.phase = spi::Phase::CaptureOnSecondTransition;
+    display_config.polarity = spi::Polarity::IdleHigh;
 
     let display_spi = SpiDeviceWithConfig::new(
         &spi_bus,
@@ -99,8 +99,15 @@ async fn main(_spawner: Spawner) {
 
     let mut display = ST7789::new(di, Some(rst), 240, 240);
 
-    let _ = display.init(&mut Delay);
-    let _ = display.set_orientation(Orientation::Portrait);
+    let _ = display.init(&mut Delay).await;
+    let _ = display
+        .set_tearing_effect(display::TearingEffect::Vertical)
+        .await;
+    let _ = display.set_orientation(Orientation::Portrait).await;
+    let _ = display.clear_screen(Rgb565::BLACK).await;
+    back_light.set_brightness(50);
+    back_light.toggle();
+
     // display.clear(Rgb565::BLACK).await.unwrap();
     // let mut display = Builder::new(ST7789, di)
     //     .display_size(240, 240)
@@ -144,13 +151,14 @@ async fn main(_spawner: Spawner) {
     let mut issacs_new_pos = Point::new(5, 50);
     let mut sprite_movement = true;
 
-    let mut data = [Rgb565::BLACK; 240 * 240];
-    let mut fbuf = FrameBuf::new(&mut data, 240, 240);
+    // let mut data = [Rgb565::BLACK; 240 * 240];
+    // let mut fbuf = FrameBuf::new(&mut data, 240, 240);
 
     // let area = Rectangle::new(Point::new(0, 0), fbuf.size());
+    // let test = display::graphics::framebuffer();
     loop {
-        // wait_vsync(&mut vsync).await;
-        info!("loop");
+        wait_vsync(&mut vsync).await;
+        // info!("loop");
         if right_button.is_pressed() {
             issacs_new_pos.x += 2;
             sprite_movement = true;
@@ -173,7 +181,7 @@ async fn main(_spawner: Spawner) {
 
         //background
         if sprite_movement {
-            background.draw(&mut fbuf).unwrap();
+            background.draw(&mut display).unwrap();
         }
         sprite_movement = false;
 
@@ -183,14 +191,16 @@ async fn main(_spawner: Spawner) {
 
         core::write!(&mut buf, "fps: {:.1}", fps).unwrap();
         Text::new(&buf, Point::new(0, 15), char_style)
-            .draw(&mut fbuf)
+            .draw(&mut display)
             .unwrap();
         frames += 1;
 
-        issac_sprite.move_sprite(issacs_new_pos, &mut fbuf);
+        issac_sprite.move_sprite(issacs_new_pos, &mut display);
 
-        let pixels = fbuf.into_iter().into_iter();
-
+        // let pixels = framebuffer().into_iter().map(|&mut pixel| pixel);
+        // let pixels = framebuffer();
+        // let result = display.set_pixels(0, 0, 240, 240, pixels).await;
+        display.shotgun().await;
         // for pixel in pixels {
         //     let color = RawU16::from(pixel.1).into_inner();
         //     let x = pixel.0.x as u16;
@@ -202,31 +212,31 @@ async fn main(_spawner: Spawner) {
         // display.set_pixels(0, 0, 240, 240, fbuf.data.into_iter());
         // display.
 
-        // //  Batch the pixels into Pixel Rows.
-        let rows = to_rows(pixels);
-        //  Batch the Pixel Rows into Pixel Blocks.
-        let blocks = to_blocks(rows);
-        //  For each Pixel Block...
-        for PixelBlock {
-            x_left,
-            x_right,
-            y_top,
-            y_bottom,
-            colors,
-            ..
-        } in blocks
-        {
-            // info!(
-            //     "x_left: {}, x_right: {}, y_top: {}, y_bottom: {}",
-            //     x_left, x_right, y_top, y_bottom
-            // );
-            let reuslt = display
-                .set_pixels(x_left, y_top, x_right, y_bottom, colors)
-                .await;
-            if reuslt.is_err() {
-                info!("Error setting pixels");
-            }
-        }
+        //  Batch the pixels into Pixel Rows.
+        // let rows = to_rows(pixels);
+        // //  Batch the Pixel Rows into Pixel Blocks.
+        // let blocks = to_blocks(rows);
+        // //  For each Pixel Block...
+        // for PixelBlock {
+        //     x_left,
+        //     x_right,
+        //     y_top,
+        //     y_bottom,
+        //     colors,
+        //     ..
+        // } in blocks
+        // {
+        //     // info!(
+        //     //     "x_left: {}, x_right: {}, y_top: {}, y_bottom: {}",
+        //     //     x_left, x_right, y_top, y_bottom
+        //     // );
+        //     let reuslt = display
+        //         .set_pixels(x_left, y_top, x_right, y_bottom, colors)
+        //         .await;
+        //     if reuslt.is_err() {
+        //         info!("Error setting pixels");
+        //     }
+        // }
         // display.fill_contiguous(&area, new_data).unwrap();
         // display.draw_iter(fbuf.into_iter()).unwrap();
     }

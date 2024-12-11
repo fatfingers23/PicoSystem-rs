@@ -10,11 +10,14 @@ use core::iter::once;
 
 use display_interface::AsyncWriteOnlyDataCommand;
 use display_interface::DataFormat::{U16BEIter, U8Iter};
+use embedded_graphics::pixelcolor::raw::RawU16;
+use embedded_graphics::prelude::RawData;
 use embedded_hal_1::delay::DelayNs;
 use embedded_hal_1::digital::OutputPin;
+use graphics::{framebuffer, HEIGHT, WIDTH};
 use instruction::Instruction;
 
-mod graphics;
+pub mod graphics;
 
 pub mod batch;
 
@@ -232,6 +235,16 @@ where
             .map_err(|_| Error::DisplayError)
     }
 
+    pub async fn shotgun(&mut self) -> Result<(), Error<PinE>> {
+        // self.set_address_window(sx, sy, ex, ey).await?;
+        // self.write_command(Instruction::RAMWR).await?;
+        let pixels = framebuffer();
+        self.di
+            .send_data(U16BEIter(&mut pixels.iter().cloned()))
+            .await
+            .map_err(|_| Error::DisplayError)
+    }
+
     ///
     /// Sets scroll offset "shifting" the displayed picture
     /// # Arguments
@@ -301,4 +314,21 @@ where
             }
         }
     }
+
+    pub async fn clear_screen(
+        &mut self,
+        color: <ST7789<DI, RST> as embedded_graphics::draw_target::DrawTarget>::Color,
+    ) -> Result<(), DisplayError> {
+        let color = RawU16::from(color).into_inner().to_be();
+        for _ in 0..2 {
+            let colors = core::iter::repeat(RawU16::from(color).into_inner()).take(WIDTH * HEIGHT);
+            let _ = self
+                .set_pixels(0, 0, (WIDTH - 1) as u16, (HEIGHT - 1) as u16, colors)
+                .await;
+        }
+
+        Ok(())
+    }
 }
+
+pub enum DisplayError {}
