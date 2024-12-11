@@ -5,6 +5,9 @@ pub use embassy_rp::peripherals::*;
 use embassy_rp::{
     config::Config,
     gpio::{AnyPin, Input, Level, Output, Pull},
+    pwm::{ChannelAPin, ChannelBPin, Pwm, SetDutyCycle, Slice},
+    usb::Out,
+    Peripheral,
 };
 use embassy_time::{with_deadline, Duration, Instant, Timer};
 
@@ -19,7 +22,7 @@ pub struct Peripherals {
     pub PIN_7: PIN_7,
     pub PIN_8: PIN_8,
     pub PIN_9: PIN_9,
-    pub PIN_12: PIN_12,
+
     pub PIN_27: PIN_27,
     pub PIN_28: PIN_28,
     pub PIN_VBUS_DETECT: PIN_2,
@@ -55,7 +58,6 @@ pub struct Peripherals {
     pub PWM_SLICE3: PWM_SLICE3,
     pub PWM_SLICE4: PWM_SLICE4,
     pub PWM_SLICE5: PWM_SLICE5,
-    pub PWM_SLICE6: PWM_SLICE6,
     pub PWM_SLICE7: PWM_SLICE7,
     pub USB: USB,
     pub RTC: RTC,
@@ -68,6 +70,7 @@ pub struct Peripherals {
     pub WATCHDOG: WATCHDOG,
     pub BOOTSEL: BOOTSEL,
     //PicoSystem specific peripherals
+    pub SCREEN_BACKLIGHT: Led<'static>,
     pub LED_G: Output<'static>,
     pub LED_R: Output<'static>,
     pub LED_B: Output<'static>,
@@ -81,6 +84,48 @@ pub struct Peripherals {
     pub LEFT_BUTTON: Button<'static>,
     pub UP_BUTTON: Button<'static>,
     pub AUDIO: Output<'static>,
+}
+
+pub struct Led<'a> {
+    pwm: Pwm<'a>,
+    on: bool,
+    brightness: u8,
+}
+
+impl<'a> Led<'a> {
+    pub fn new<T: Slice>(
+        slice: impl Peripheral<P = T> + 'a,
+        a: impl Peripheral<P = impl ChannelAPin<T>> + 'a,
+    ) -> Self {
+        let mut c = embassy_rp::pwm::Config::default();
+        c.top = 65535;
+        let pwm = Pwm::new_output_a(slice, a, c.clone());
+        Self {
+            pwm,
+            on: false,
+            brightness: 100,
+        }
+    }
+
+    /// Toggles the light or on
+    /// If it is toggled on it goes back to the previous brightness
+    pub fn toggle(&mut self) {
+        self.on = !self.on;
+        match self.on {
+            true => {
+                let _ = self.pwm.set_duty_cycle_percent(self.brightness);
+            }
+            false => {
+                let _ = self.pwm.set_duty_cycle_fully_off();
+            }
+        }
+    }
+
+    /// Sets the brightness of the led by percentage
+    pub fn set_brightness(&mut self, brightness: u8) {
+        self.brightness = brightness;
+        let _ = self.pwm.set_duty_cycle_percent(self.brightness);
+    }
 }
 
 //TODO move this to a new game engine crate?
@@ -128,7 +173,7 @@ pub fn init(config: Config) -> Peripherals {
         PIN_7: p.PIN_7,
         PIN_8: p.PIN_8,
         PIN_9: p.PIN_9,
-        PIN_12: p.PIN_12,
+
         PIN_27: p.PIN_27,
         PIN_28: p.PIN_28,
         PIN_VBUS_DETECT: p.PIN_2,
@@ -164,7 +209,7 @@ pub fn init(config: Config) -> Peripherals {
         PWM_SLICE3: p.PWM_SLICE3,
         PWM_SLICE4: p.PWM_SLICE4,
         PWM_SLICE5: p.PWM_SLICE5,
-        PWM_SLICE6: p.PWM_SLICE6,
+
         PWM_SLICE7: p.PWM_SLICE7,
         USB: p.USB,
         RTC: p.RTC,
@@ -177,6 +222,8 @@ pub fn init(config: Config) -> Peripherals {
         WATCHDOG: p.WATCHDOG,
         BOOTSEL: p.BOOTSEL,
         //PicoSystem specific peripherals
+        SCREEN_BACKLIGHT: Led::new(p.PWM_SLICE6, p.PIN_12),
+        //TODO explore moving to led with pwm
         LED_G: Output::new(p.PIN_13, Level::Low),
         LED_R: Output::new(p.PIN_14, Level::Low),
         LED_B: Output::new(p.PIN_15, Level::Low),

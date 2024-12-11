@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(impl_trait_in_assoc_type)]
 
 use core::cell::RefCell;
 use core::fmt::Write;
@@ -11,6 +12,7 @@ use embassy_rp::{
     bind_interrupts,
     gpio::{Input, Level, Output, Pull},
     peripherals::PIO0,
+    pwm::{Pwm, SetDutyCycle},
     spi::{self, Spi},
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
@@ -22,12 +24,12 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::Text;
+use embedded_graphics_framebuf::FrameBuf;
 use mipidsi::{
     models::ST7789,
     options::{Orientation, TearingEffect},
     Builder,
 };
-
 use tinybmp::Bmp;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -41,14 +43,16 @@ mod peripherals;
 async fn main(_spawner: Spawner) {
     let p = peripherals::init(Default::default());
     let delay: Duration = Duration::from_millis(1000);
-
+    info!("Hello, World!");
     let mut led_g = p.LED_G;
     let mut led_r = p.LED_R;
     let mut led_b = p.LED_B;
+    led_b.set_high();
 
     // Display pins
-    let mut back_light = Output::new(p.PIN_12, Level::Low);
-    back_light.set_high();
+    let mut back_light = p.SCREEN_BACKLIGHT;
+    back_light.set_brightness(75);
+    back_light.toggle();
 
     let mut display_cs = p.PIN_5;
     let mut miso = p.PIN_6;
@@ -62,13 +66,11 @@ async fn main(_spawner: Spawner) {
     //SPI Display setup
     let mut display_config = spi::Config::default();
     display_config.frequency = 64_000_000;
+    // display_config.frequency = 8_000_000;
     display_config.phase = spi::Phase::CaptureOnSecondTransition;
     display_config.polarity = spi::Polarity::IdleHigh;
 
-    let mut spi_config = spi::Config::default();
-    spi_config.frequency = 64_000_000;
-
-    let spi = Spi::new_blocking_txonly(p.SPI0, &mut miso, &mut mosi, spi_config);
+    let spi = Spi::new_blocking_txonly(p.SPI0, &mut miso, &mut mosi, spi::Config::default());
     let spi_bus: Mutex<NoopRawMutex, _> = Mutex::new(RefCell::new(spi));
 
     let dcx = Output::new(dc, Level::Low);
@@ -104,7 +106,7 @@ async fn main(_spawner: Spawner) {
         Bmp::from_slice(include_bytes!("../assets/background.bmp")).unwrap();
     let background = Image::new(&background_bmp, Point::new(0, 0));
 
-    let mut issac_sprite = Sprite::new(Point::new(5, 120), bmp_issac);
+    let mut issac_sprite = Sprite::new(Point::new(5, 50), bmp_issac);
 
     let mut y_button = p.Y_BUTTON;
     let x_button = p.X_BUTTON;
@@ -114,8 +116,6 @@ async fn main(_spawner: Spawner) {
     let right_button = p.RIGHT_BUTTON;
     let left_button = p.LEFT_BUTTON;
     let up_button = p.UP_BUTTON;
-
-    led_b.set_high();
 
     let mut frames = 0;
 
@@ -127,8 +127,11 @@ async fn main(_spawner: Spawner) {
         .background_color(Rgb565::BLACK)
         .build();
     let mut buf = heapless::String::<255>::new();
-    let mut issacs_new_pos = Point::new(5, 120);
+    let mut issacs_new_pos = Point::new(5, 50);
     let mut sprite_movement = true;
+    let mut data = [Rgb565::BLACK; 240 * 240];
+    let mut fbuf = FrameBuf::new(&mut data, 240, 240);
+    let area = Rectangle::new(Point::new(0, 0), fbuf.size());
     loop {
         wait_vsync(&mut vsync).await;
 
@@ -154,7 +157,7 @@ async fn main(_spawner: Spawner) {
 
         //background
         if sprite_movement {
-            background.draw(&mut display).unwrap();
+            background.draw(&mut fbuf).unwrap();
         }
         sprite_movement = false;
 
@@ -164,11 +167,17 @@ async fn main(_spawner: Spawner) {
 
         core::write!(&mut buf, "fps: {:.1}", fps).unwrap();
         Text::new(&buf, Point::new(0, 15), char_style)
-            .draw(&mut display)
+            .draw(&mut fbuf)
             .unwrap();
         frames += 1;
 
-        issac_sprite.move_sprite(issacs_new_pos, &mut display);
+        issac_sprite.move_sprite(issacs_new_pos, &mut fbuf);
+        let new_data = fbuf.data.iter_mut().map(|c| *c);
+        display.fill_contiguous(&area, new_data).unwrap();
+
+        // display
+        //     .fill_contiguous(&area, data.iter().copied())
+        //     .unwrap();
     }
 }
 
@@ -212,12 +221,12 @@ impl<'a> Sprite<'a> {
         }
 
         if let Some(size) = self.size {
-            let erase_old_sprite = Rectangle::new(self.point, size).into_styled(
-                PrimitiveStyleBuilder::new()
-                    .fill_color(Rgb565::BLACK)
-                    .build(),
-            );
-            let _ = erase_old_sprite.draw(display);
+            // let erase_old_sprite = Rectangle::new(self.point, size).into_styled(
+            //     PrimitiveStyleBuilder::new()
+            //         .fill_color(Rgb565::BLACK)
+            //         .build(),
+            // );
+            // let _ = erase_old_sprite.draw(display);
             self.point = new_location;
             self.draw(display);
         }
