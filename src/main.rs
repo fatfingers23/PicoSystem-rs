@@ -5,7 +5,9 @@
 use core::cell::RefCell;
 use core::fmt::Write;
 use defmt::*;
-use display_interface_spi::SPIInterface;
+// use display_interface_spi::SPIInterface;
+use mipidsi::interface::SpiInterface;
+
 use embassy_embedded_hal::shared_bus::blocking::spi::SpiDeviceWithConfig;
 use embassy_executor::Spawner;
 use embassy_rp::{
@@ -25,6 +27,7 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::Text;
 use embedded_graphics_framebuf::FrameBuf;
+// use mipidsi::interface::SpiInterface;
 use mipidsi::{
     models::ST7789,
     options::{Orientation, TearingEffect},
@@ -65,7 +68,7 @@ async fn main(_spawner: Spawner) {
 
     //SPI Display setup
     let mut display_config = spi::Config::default();
-    display_config.frequency = 64_000_000;
+    display_config.frequency = 80_000_000;
     // display_config.frequency = 8_000_000;
     display_config.phase = spi::Phase::CaptureOnSecondTransition;
     display_config.polarity = spi::Polarity::IdleHigh;
@@ -82,7 +85,10 @@ async fn main(_spawner: Spawner) {
         display_config,
     );
 
-    let di = SPIInterface::new(display_spi, dcx);
+    // let di = SPIInterface::new(display_spi, dcx);
+
+    let mut buffer = [0_u8; 240 * 240];
+    let di = SpiInterface::new(display_spi, dcx, &mut buffer);
 
     let mut display = Builder::new(ST7789, di)
         .display_size(240, 240)
@@ -129,8 +135,10 @@ async fn main(_spawner: Spawner) {
     let mut buf = heapless::String::<255>::new();
     let mut issacs_new_pos = Point::new(5, 50);
     let mut sprite_movement = true;
+
     let mut data = [Rgb565::BLACK; 240 * 240];
     let mut fbuf = FrameBuf::new(&mut data, 240, 240);
+
     let area = Rectangle::new(Point::new(0, 0), fbuf.size());
     loop {
         wait_vsync(&mut vsync).await;
@@ -172,12 +180,15 @@ async fn main(_spawner: Spawner) {
         frames += 1;
 
         issac_sprite.move_sprite(issacs_new_pos, &mut fbuf);
+        // if sprite_movement {
         let new_data = fbuf.data.iter_mut().map(|c| *c);
-        display.fill_contiguous(&area, new_data).unwrap();
 
-        // display
-        //     .fill_contiguous(&area, data.iter().copied())
-        //     .unwrap();
+        display.fill_contiguous(&area, new_data).unwrap();
+        // display.draw_iter(fbuf.into_iter()).unwrap();
+
+        // }
+
+        // display.fill_contiguous(&area, data).unwrap();
     }
 }
 

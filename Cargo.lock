@@ -1602,8 +1602,8 @@ checksum = "c3c8dda44ff03a2f238717214da50f65d5a53b45cd213a7370424ffdb6fae815"
 [[package]]
 name = "mipidsi"
 version = "0.8.0"
+source = "git+https://github.com/GrantM11235/mipidsi.git?rev=9a7e17cd3124bf9e533c2fdf2a987d1f3ed43adb#9a7e17cd3124bf9e533c2fdf2a987d1f3ed43adb"
 dependencies = [
- "display-interface",
  "embedded-graphics-core",
  "embedded-hal 1.0.0",
  "heapless 0.8.0",
