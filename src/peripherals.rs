@@ -5,7 +5,6 @@ use embassy_rp::{
     config::Config,
     gpio::{AnyPin, Input, Level, Output, Pull},
     pwm::{ChannelAPin, Pwm, SetDutyCycle, Slice},
-    usb::Out,
     Peripheral,
 };
 use embassy_time::Timer;

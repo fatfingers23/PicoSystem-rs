@@ -97,9 +97,10 @@ pio-proc = "0.2"
 pio = "0.2.1"
 rand = { version = "0.8.5", default-features = false }
 embedded-sdmmc = "0.7.0"
-mipidsi = "0.8.0"
+# mipidsi = "0.8.0"
 tinybmp = "0.6.0"
 embedded-graphics-framebuf = "0.5.0"
+embedded-graphics-core = "0.3.2"
 
 [profile.release]
 debug = 2
@@ -111,4 +112,4 @@ opt-level = "z"
 [patch.crates-io]
 embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "8803128707b8bd9fc9dcea392a62dfd42aa822d2" }
 # mipidsi = { path = "../mipidsi/mipidsi" }
-mipidsi = { git = "https://github.com/GrantM11235/mipidsi.git", rev = "9a7e17cd3124bf9e533c2fdf2a987d1f3ed43adb" }
+# mipidsi = { git = "https://github.com/GrantM11235/mipidsi.git", rev = "9a7e17cd3124bf9e533c2fdf2a987d1f3ed43adb" }
