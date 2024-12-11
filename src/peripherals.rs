@@ -1,15 +1,14 @@
 #![allow(non_snake_case)]
-use cortex_m::delay::Delay;
-use defmt::{info, Format};
+
 pub use embassy_rp::peripherals::*;
 use embassy_rp::{
     config::Config,
     gpio::{AnyPin, Input, Level, Output, Pull},
-    pwm::{ChannelAPin, ChannelBPin, Pwm, SetDutyCycle, Slice},
+    pwm::{ChannelAPin, Pwm, SetDutyCycle, Slice},
     usb::Out,
     Peripheral,
 };
-use embassy_time::{with_deadline, Duration, Instant, Timer};
+use embassy_time::Timer;
 
 #[allow(dead_code)]
 pub struct Peripherals {
@@ -22,7 +21,6 @@ pub struct Peripherals {
     pub PIN_7: PIN_7,
     pub PIN_8: PIN_8,
     pub PIN_9: PIN_9,
-
     pub PIN_27: PIN_27,
     pub PIN_28: PIN_28,
     pub PIN_VBUS_DETECT: PIN_2,

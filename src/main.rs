@@ -180,15 +180,10 @@ async fn main(_spawner: Spawner) {
         frames += 1;
 
         issac_sprite.move_sprite(issacs_new_pos, &mut fbuf);
-        // if sprite_movement {
-        let new_data = fbuf.data.iter_mut().map(|c| *c);
 
+        let new_data = fbuf.data.iter_mut().map(|c| *c);
         display.fill_contiguous(&area, new_data).unwrap();
         // display.draw_iter(fbuf.into_iter()).unwrap();
-
-        // }
-
-        // display.fill_contiguous(&area, data).unwrap();
     }
 }
 
