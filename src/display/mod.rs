@@ -16,8 +16,7 @@ use instruction::Instruction;
 
 mod graphics;
 
-// #[cfg(feature = "batch")]
-mod batch;
+pub mod batch;
 
 ///
 /// ST7789 driver to connect to TFT displays.

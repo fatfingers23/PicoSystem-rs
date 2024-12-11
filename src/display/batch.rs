@@ -2,7 +2,7 @@
 //! Batch the pixels to be rendered into Pixel Rows and Pixel Blocks (contiguous Pixel Rows).
 //! This enables the pixels to be rendered efficiently as Pixel Blocks, which may be transmitted in a single Non-Blocking SPI request.
 
-use crate::ST7789::{Error, ST7789};
+use crate::display::{Error, ST7789};
 use display_interface::AsyncWriteOnlyDataCommand;
 use embedded_graphics_core::{
     pixelcolor::{raw::RawU16, Rgb565},
@@ -131,7 +131,7 @@ pub struct PixelBlock {
 
 /// Batch the pixels into Pixel Rows, which are contiguous pixels on the same row.
 /// P can be any Pixel Iterator (e.g. a rectangle).
-fn to_rows<P>(pixels: P) -> RowIterator<P>
+pub fn to_rows<P>(pixels: P) -> RowIterator<P>
 where
     P: Iterator<Item = Pixel<Rgb565>>,
 {
@@ -147,7 +147,7 @@ where
 
 /// Batch the Pixel Rows into Pixel Blocks, which are contiguous Pixel Rows with the same start and end column number
 /// R can be any Pixel Row Iterator.
-fn to_blocks<R>(rows: R) -> BlockIterator<R>
+pub fn to_blocks<R>(rows: R) -> BlockIterator<R>
 where
     R: Iterator<Item = PixelRow>,
 {

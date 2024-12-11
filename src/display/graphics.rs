@@ -1,5 +1,5 @@
 // use crate::ST7789::batch::DrawBatch;
-use crate::ST7789::{Error, Orientation, ST7789};
+use crate::display::{Error, Orientation, ST7789};
 
 use display_interface::AsyncWriteOnlyDataCommand;
 use embedded_graphics_core::pixelcolor::Rgb565;
@@ -103,26 +103,26 @@ where
         Ok(())
     }
 
-    // fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-    //     let color = RawU16::from(color).into_inner().to_be();
-    //     unsafe {
-    //         dma::set_mem(
-    //             &mut self.dma_channel,
-    //             &color as *const u16 as u32,
-    //             framebuffer().as_ptr() as u32,
-    //             2,
-    //             (WIDTH * HEIGHT) as u32,
-    //         );
-    //     }
-    //     if framebuffer()[0] != color {
-    //         log::info!(
-    //             "incorrect framebuffer[0], expected {} got {}",
-    //             color,
-    //             framebuffer()[0]
-    //         );
-    //     }
-    //     Ok(())
-    // }
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        let color = RawU16::from(color).into_inner().to_be();
+        unsafe {
+            dma::set_mem(
+                &mut self.dma_channel,
+                &color as *const u16 as u32,
+                framebuffer().as_ptr() as u32,
+                2,
+                (WIDTH * HEIGHT) as u32,
+            );
+        }
+        if framebuffer()[0] != color {
+            log::info!(
+                "incorrect framebuffer[0], expected {} got {}",
+                color,
+                framebuffer()[0]
+            );
+        }
+        Ok(())
+    }
 }
 
 impl<DI, RST, PinE> OriginDimensions for ST7789<DI, RST>

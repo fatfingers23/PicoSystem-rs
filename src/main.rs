@@ -4,6 +4,7 @@
 
 use core::cell::RefCell;
 use core::fmt::Write;
+use defmt::info;
 // use display_interface_spi::asynch::SPIInterface;
 use display_interface_spi::SPIInterface;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDeviceWithConfig;
@@ -18,12 +19,12 @@ use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 // use embedded_hal_async::spi::SpiBus::Spi;
 // use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::{Delay, Instant};
-use embedded_graphics::image::Image;
 use embedded_graphics::mono_font::ascii::FONT_10X20;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::Text;
+use embedded_graphics::{image::Image, pixelcolor::raw::RawU16};
 use embedded_graphics_framebuf::FrameBuf;
 use static_cell::StaticCell;
 // use mipidsi::{
@@ -31,14 +32,17 @@ use static_cell::StaticCell;
 //     options::{Orientation, TearingEffect},
 //     Builder,
 // };
+use display::{
+    batch::{to_blocks, to_rows, PixelBlock},
+    Orientation, ST7789,
+};
 use tinybmp::Bmp;
-use ST7789::Orientation;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => embassy_rp::pio::InterruptHandler<PIO0>;
 });
-mod ST7789;
+mod display;
 mod peripherals;
 
 type Spi0Bus = Mutex<NoopRawMutex, Spi<'static, SPI0, spi::Async>>;
@@ -93,10 +97,11 @@ async fn main(_spawner: Spawner) {
 
     let di = SPIInterface::new(display_spi, dcx);
 
-    // let mut display = ST7789::new(di, rst, 240, 240);
+    let mut display = ST7789::new(di, Some(rst), 240, 240);
 
-    // display.init(&mut Delay).unwrap();
-    // display.set_orientation(Orientation::Portrait).unwrap();
+    let _ = display.init(&mut Delay);
+    let _ = display.set_orientation(Orientation::Portrait);
+    // display.clear(Rgb565::BLACK).await.unwrap();
     // let mut display = Builder::new(ST7789, di)
     //     .display_size(240, 240)
     //     // .refresh_order(RefreshOrder::new(
@@ -144,8 +149,8 @@ async fn main(_spawner: Spawner) {
 
     // let area = Rectangle::new(Point::new(0, 0), fbuf.size());
     loop {
-        wait_vsync(&mut vsync).await;
-
+        // wait_vsync(&mut vsync).await;
+        info!("loop");
         if right_button.is_pressed() {
             issacs_new_pos.x += 2;
             sprite_movement = true;
@@ -184,7 +189,44 @@ async fn main(_spawner: Spawner) {
 
         issac_sprite.move_sprite(issacs_new_pos, &mut fbuf);
 
-        // let new_data = fbuf.data.iter_mut().map(|c| *c);
+        let pixels = fbuf.into_iter().into_iter();
+
+        // for pixel in pixels {
+        //     let color = RawU16::from(pixel.1).into_inner();
+        //     let x = pixel.0.x as u16;
+        //     let y = pixel.0.y as u16;
+
+        //     let _ = display.set_pixel(x, y, color).await;
+        // }
+
+        // display.set_pixels(0, 0, 240, 240, fbuf.data.into_iter());
+        // display.
+
+        // //  Batch the pixels into Pixel Rows.
+        let rows = to_rows(pixels);
+        //  Batch the Pixel Rows into Pixel Blocks.
+        let blocks = to_blocks(rows);
+        //  For each Pixel Block...
+        for PixelBlock {
+            x_left,
+            x_right,
+            y_top,
+            y_bottom,
+            colors,
+            ..
+        } in blocks
+        {
+            // info!(
+            //     "x_left: {}, x_right: {}, y_top: {}, y_bottom: {}",
+            //     x_left, x_right, y_top, y_bottom
+            // );
+            let reuslt = display
+                .set_pixels(x_left, y_top, x_right, y_bottom, colors)
+                .await;
+            if reuslt.is_err() {
+                info!("Error setting pixels");
+            }
+        }
         // display.fill_contiguous(&area, new_data).unwrap();
         // display.draw_iter(fbuf.into_iter()).unwrap();
     }

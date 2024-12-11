@@ -876,7 +876,7 @@ dependencies = [
  "embassy-usb 0.3.0",
  "embassy-usb-logger",
  "embedded-graphics",
- "embedded-graphics-core 0.3.3",
+ "embedded-graphics-core",
  "embedded-graphics-framebuf",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
@@ -919,19 +919,9 @@ checksum = "0649998afacf6d575d126d83e68b78c0ab0e00ca2ac7e9b3db11b4cbe8274ef0"
 dependencies = [
  "az",
  "byteorder",
- "embedded-graphics-core 0.4.0",
+ "embedded-graphics-core",
  "float-cmp",
  "micromath",
-]
-
-[[package]]
-name = "embedded-graphics-core"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8b1239db5f3eeb7e33e35bd10bd014e7b2537b17e071f726a09351431337cfa"
-dependencies = [
- "az",
- "byteorder",
 ]
 
 [[package]]
