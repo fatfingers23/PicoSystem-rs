@@ -65,7 +65,6 @@ where
     where
         I: IntoIterator<Item = Self::Color>,
     {
-        // let test = self.framebuffer_bounding_box().intersection(area);
         let clipped_area = area.intersection(&self.framebuffer_bounding_box().intersection(area));
         if area.bottom_right().is_none() || clipped_area.bottom_right().is_none() {
             return Ok(());

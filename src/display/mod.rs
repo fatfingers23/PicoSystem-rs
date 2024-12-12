@@ -8,8 +8,8 @@ mod instruction;
 use core::iter::once;
 // use instruction::Instruction;
 
-use display_interface::AsyncWriteOnlyDataCommand;
-use display_interface::DataFormat::{U16BEIter, U8Iter};
+use display_interface::DataFormat::{U16BEIter, U16LEIter, U8Iter};
+use display_interface::{AsyncWriteOnlyDataCommand, DisplayError};
 use embedded_graphics::pixelcolor::raw::RawU16;
 use embedded_graphics::prelude::RawData;
 use embedded_hal_1::delay::DelayNs;
@@ -72,12 +72,6 @@ pub enum TearingEffect {
     HorizontalAndVertical,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum BacklightState {
-    On,
-    Off,
-}
-
 ///
 /// An error holding its source (pins or SPI)
 ///
@@ -132,7 +126,7 @@ where
         delay_source.delay_us(150_000);
         self.write_command(Instruction::SLPOUT).await?; // turn off sleep
         delay_source.delay_us(10_000);
-        self.write_command(Instruction::INVOFF).await?; // turn off invert
+        // self.write_command(Instruction::INVOFF).await?; // turn off invert
         self.write_command(Instruction::VSCRDER).await?; // vertical scroll definition
         self.write_data(&[0u8, 0u8, 0x14u8, 0u8, 0u8, 0u8]).await?; // 0 TSA, 320 VSA, 0 BSA
         self.write_command(Instruction::MADCTL).await?; // left -> right, bottom -> top RGB
@@ -144,6 +138,9 @@ where
         self.write_command(Instruction::NORON).await?; // turn on display
         delay_source.delay_us(10_000);
         self.write_command(Instruction::DISPON).await?; // turn on display
+        delay_source.delay_us(10_000);
+
+        self.set_address_window(0, 0, 240, 250).await?;
         delay_source.delay_us(10_000);
         Ok(())
     }
@@ -230,17 +227,15 @@ where
         self.set_address_window(sx, sy, ex, ey).await?;
         self.write_command(Instruction::RAMWR).await?;
         self.di
-            .send_data(U16BEIter(&mut colors.into_iter()))
+            .send_data(U16LEIter(&mut colors.into_iter()))
             .await
             .map_err(|_| Error::DisplayError)
     }
 
     pub async fn shotgun(&mut self) -> Result<(), Error<PinE>> {
-        // self.set_address_window(sx, sy, ex, ey).await?;
-        // self.write_command(Instruction::RAMWR).await?;
         let pixels = framebuffer();
         self.di
-            .send_data(U16BEIter(&mut pixels.iter().cloned()))
+            .send_data(U16LEIter(&mut pixels.iter().cloned()))
             .await
             .map_err(|_| Error::DisplayError)
     }
@@ -330,5 +325,3 @@ where
         Ok(())
     }
 }
-
-pub enum DisplayError {}

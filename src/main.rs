@@ -18,25 +18,18 @@ use embassy_rp::{
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 // use embedded_hal_async::spi::SpiBus::Spi;
 // use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Instant};
-use embedded_graphics::mono_font::ascii::FONT_10X20;
-use embedded_graphics::mono_font::MonoTextStyleBuilder;
-use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::prelude::*;
-use embedded_graphics::text::Text;
-use embedded_graphics::{image::Image, pixelcolor::raw::RawU16};
-use embedded_graphics_framebuf::FrameBuf;
-use static_cell::StaticCell;
-// use mipidsi::{
-//     models::ST7789,
-//     options::{Orientation, TearingEffect},
-//     Builder,
-// };
 use display::{
     batch::{to_blocks, to_rows, PixelBlock},
     graphics::framebuffer,
     Orientation, ST7789,
 };
+use embassy_time::{Delay, Instant};
+use embedded_graphics::image::Image;
+use embedded_graphics::mono_font::ascii::FONT_10X20;
+use embedded_graphics::mono_font::MonoTextStyleBuilder;
+use embedded_graphics::pixelcolor::Rgb565;
+use embedded_graphics::prelude::*;
+use embedded_graphics::text::Text;
 use tinybmp::Bmp;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -151,11 +144,6 @@ async fn main(_spawner: Spawner) {
     let mut issacs_new_pos = Point::new(5, 50);
     let mut sprite_movement = true;
 
-    // let mut data = [Rgb565::BLACK; 240 * 240];
-    // let mut fbuf = FrameBuf::new(&mut data, 240, 240);
-
-    // let area = Rectangle::new(Point::new(0, 0), fbuf.size());
-    // let test = display::graphics::framebuffer();
     loop {
         wait_vsync(&mut vsync).await;
         // info!("loop");
@@ -197,48 +185,7 @@ async fn main(_spawner: Spawner) {
 
         issac_sprite.move_sprite(issacs_new_pos, &mut display);
 
-        // let pixels = framebuffer().into_iter().map(|&mut pixel| pixel);
-        // let pixels = framebuffer();
-        // let result = display.set_pixels(0, 0, 240, 240, pixels).await;
-        display.shotgun().await;
-        // for pixel in pixels {
-        //     let color = RawU16::from(pixel.1).into_inner();
-        //     let x = pixel.0.x as u16;
-        //     let y = pixel.0.y as u16;
-
-        //     let _ = display.set_pixel(x, y, color).await;
-        // }
-
-        // display.set_pixels(0, 0, 240, 240, fbuf.data.into_iter());
-        // display.
-
-        //  Batch the pixels into Pixel Rows.
-        // let rows = to_rows(pixels);
-        // //  Batch the Pixel Rows into Pixel Blocks.
-        // let blocks = to_blocks(rows);
-        // //  For each Pixel Block...
-        // for PixelBlock {
-        //     x_left,
-        //     x_right,
-        //     y_top,
-        //     y_bottom,
-        //     colors,
-        //     ..
-        // } in blocks
-        // {
-        //     // info!(
-        //     //     "x_left: {}, x_right: {}, y_top: {}, y_bottom: {}",
-        //     //     x_left, x_right, y_top, y_bottom
-        //     // );
-        //     let reuslt = display
-        //         .set_pixels(x_left, y_top, x_right, y_bottom, colors)
-        //         .await;
-        //     if reuslt.is_err() {
-        //         info!("Error setting pixels");
-        //     }
-        // }
-        // display.fill_contiguous(&area, new_data).unwrap();
-        // display.draw_iter(fbuf.into_iter()).unwrap();
+        let _ = display.shotgun().await;
     }
 }
 
