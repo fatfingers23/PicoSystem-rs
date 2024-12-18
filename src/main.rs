@@ -101,22 +101,6 @@ async fn main(_spawner: Spawner) {
     back_light.set_brightness(50);
     back_light.toggle();
 
-    // display.clear(Rgb565::BLACK).await.unwrap();
-    // let mut display = Builder::new(ST7789, di)
-    //     .display_size(240, 240)
-    //     // .refresh_order(RefreshOrder::new(
-    //     //     mipidsi::options::VerticalRefreshOrder::BottomToTop,
-    //     //     mipidsi::options::HorizontalRefreshOrder::RightToLeft,
-    //     // ))
-    //     .invert_colors(mipidsi::options::ColorInversion::Inverted)
-    //     .reset_pin(rst)
-    //     .orientation(Orientation::new())
-    //     .init(&mut Delay)
-    //     .unwrap();
-    // //Display demo
-    // display.set_tearing_effect(TearingEffect::Vertical).unwrap();
-    // display.clear(Rgb565::BLACK).unwrap();
-
     let bmp_data = include_bytes!("../assets/issac.bmp");
     let bmp_issac: Bmp<Rgb565> = Bmp::from_slice(bmp_data).unwrap();
 
@@ -144,8 +128,12 @@ async fn main(_spawner: Spawner) {
     let mut issacs_new_pos = Point::new(5, 50);
     let mut sprite_movement = true;
 
+    // let test_dma = p.DMA_CH1;
+
     loop {
         wait_vsync(&mut vsync).await;
+        let draw_start = Instant::now();
+
         // info!("loop");
         if right_button.is_pressed() {
             issacs_new_pos.x += 2;
@@ -185,7 +173,25 @@ async fn main(_spawner: Spawner) {
 
         issac_sprite.move_sprite(issacs_new_pos, &mut display);
 
+        info!("Draw: {:?}", draw_start.elapsed().as_millis());
+        let shotgun_start = Instant::now();
         let _ = display.shotgun().await;
+        // let buffer = framebuffer();
+        // spi.blocking_write(buffer);
+        // let tx_transfer = unsafe {
+        //     // If we don't assign future to a variable, the data register pointer
+        //     // is held across an await and makes the future non-Send.
+        //     embassy_rp::dma::write(
+        //         p.DMA_CH1,
+        //         buffer,
+        //         spi.inner.regs().dr().as_ptr() as *mut _,
+        //         // self.inner.regs().dr().as_ptr() as *mut _,
+        //         T::TX_DREQ,
+        //     )
+        // };
+        // tx_transfer.await;
+
+        info!("Shotgun: {:?}", shotgun_start.elapsed().as_millis());
     }
 }
 

@@ -8,6 +8,7 @@ mod instruction;
 use core::iter::once;
 // use instruction::Instruction;
 
+use defmt::info;
 use display_interface::DataFormat::{U16BEIter, U16LEIter, U8Iter};
 use display_interface::{AsyncWriteOnlyDataCommand, DisplayError};
 use embedded_graphics::pixelcolor::raw::RawU16;
@@ -268,8 +269,9 @@ where
     }
 
     async fn write_data(&mut self, data: &[u8]) -> Result<(), Error<PinE>> {
+        let data = &mut data.iter().cloned();
         self.di
-            .send_data(U8Iter(&mut data.iter().cloned()))
+            .send_data(U8Iter(data))
             .await
             .map_err(|_| Error::DisplayError)
     }
